@@ -1,101 +1,265 @@
-import Image from "next/image";
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import CryptoCard from '@/components/CryptoCard';
+import CoinDetailModal from '@/components/CoinDetailModal';
+import { CoinAnalysis, CryptoData } from '@/types';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [shortlistedCoins, setShortlistedCoins] = useState<CoinAnalysis[]>([]);
+  const [priceData, setPriceData] = useState<Record<string, number>>({});
+  const [selectedCoin, setSelectedCoin] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+  // Fetch data on component mount and when autoRefresh is enabled
+  useEffect(() => {
+    fetchData();
+
+    // Set up auto-refresh every 5 minutes if enabled
+    let intervalId: NodeJS.Timeout | null = null;
+    if (autoRefresh) {
+      intervalId = setInterval(fetchData, 5 * 60 * 1000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [autoRefresh]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Fetch current prices
+      const pricesResponse = await fetch('/api/crypto');
+
+      if (!pricesResponse.ok) {
+        const errorData = await pricesResponse.json().catch(() => ({}));
+        throw new Error(
+          `Failed to fetch crypto prices: ${pricesResponse.status} ${
+            pricesResponse.statusText
+          }. ${errorData.error || ''}`
+        );
+      }
+
+      const pricesData = await pricesResponse.json();
+
+      // Create a map of symbol to price for easy lookup
+      const priceMap: Record<string, number> = {};
+      pricesData.data.forEach((coin: CryptoData) => {
+        priceMap[coin.symbol] = coin.price;
+      });
+      setPriceData(priceMap);
+
+      // Fetch analysis results
+      const analysisResponse = await fetch('/api/analysis');
+
+      if (!analysisResponse.ok) {
+        const errorData = await analysisResponse.json().catch(() => ({}));
+        throw new Error(
+          `Failed to fetch analysis data: ${analysisResponse.status} ${
+            analysisResponse.statusText
+          }. ${errorData.error || ''}`
+        );
+      }
+
+      const analysisData = await analysisResponse.json();
+
+      setShortlistedCoins(analysisData.shortlistedCoins);
+      setLastUpdated(new Date());
+    } catch (err) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'An unknown error occurred';
+      setError(errorMessage);
+      console.error('Error fetching data:', err);
+
+      // If we have no data yet, provide some sample data for better UX
+      if (shortlistedCoins.length === 0) {
+        provideSampleData();
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Provide sample data when API calls fail
+  const provideSampleData = () => {
+    const sampleCoins: CoinAnalysis[] = [
+      {
+        symbol: 'BTC',
+        score: 75,
+        trend: 'bullish',
+        volatility: 'medium',
+        recommendation: 'buy',
+        lastUpdated: Date.now(),
+      },
+      {
+        symbol: 'ETH',
+        score: 68,
+        trend: 'bullish',
+        volatility: 'medium',
+        recommendation: 'buy',
+        lastUpdated: Date.now(),
+      },
+      {
+        symbol: 'SOL',
+        score: 30,
+        trend: 'bearish',
+        volatility: 'high',
+        recommendation: 'sell',
+        lastUpdated: Date.now(),
+      },
+    ];
+
+    const samplePrices: Record<string, number> = {
+      BTC: 65000,
+      ETH: 3500,
+      SOL: 150,
+    };
+
+    setShortlistedCoins(sampleCoins);
+    setPriceData(samplePrices);
+    setLastUpdated(new Date());
+  };
+
+  const handleCoinClick = (symbol: string) => {
+    setSelectedCoin(symbol);
+    setModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setSelectedCoin(null);
+  };
+
+  return (
+    <main className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <header className="mb-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
+            <h1 className="text-3xl font-bold text-gray-900">
+              AI Crypto Trading Platform
+            </h1>
+            <div className="flex items-center mt-2 md:mt-0">
+              <button
+                onClick={fetchData}
+                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 mr-4"
+                disabled={loading}
+              >
+                {loading ? 'Refreshing...' : 'Refresh Data'}
+              </button>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="autoRefresh"
+                  checked={autoRefresh}
+                  onChange={(e) => setAutoRefresh(e.target.checked)}
+                  className="mr-2"
+                />
+                <label htmlFor="autoRefresh" className="text-sm text-gray-600">
+                  Auto-refresh (5m)
+                </label>
+              </div>
+            </div>
+          </div>
+          <p className="text-gray-600">
+            Automatically analyzes crypto coins and shortlists the best trading
+            opportunities
+          </p>
+          {lastUpdated && (
+            <p className="text-sm text-gray-500 mt-1">
+              Last updated: {lastUpdated.toLocaleTimeString()}
+            </p>
+          )}
+        </header>
+
+        {error ? (
+          <div className="bg-red-50 p-6 rounded-lg mb-8">
+            <h2 className="text-xl font-semibold text-red-700 mb-2">Error</h2>
+            <p className="text-red-600 mb-4">{error}</p>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <button
+                onClick={fetchData}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+              >
+                Try Again
+              </button>
+              {shortlistedCoins.length === 0 && (
+                <button
+                  onClick={provideSampleData}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Use Sample Data
+                </button>
+              )}
+            </div>
+            <div className="mt-4 p-4 bg-yellow-50 rounded-lg">
+              <h3 className="font-semibold text-yellow-800">
+                Troubleshooting Tips:
+              </h3>
+              <ul className="list-disc pl-5 mt-2 text-yellow-700">
+                <li>Check if Binance API is accessible from your location</li>
+                <li>Verify your internet connection</li>
+                <li>
+                  The application will use sample data if the API is unavailable
+                </li>
+              </ul>
+            </div>
+          </div>
+        ) : loading && shortlistedCoins.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+            <p className="text-gray-600">Analyzing crypto markets...</p>
+          </div>
+        ) : shortlistedCoins.length === 0 ? (
+          <div className="bg-yellow-50 p-6 rounded-lg">
+            <h2 className="text-xl font-semibold text-yellow-700 mb-2">
+              No Trading Opportunities
+            </h2>
+            <p className="text-yellow-600">
+              No coins meet our trading criteria at the moment. Check back later
+              or adjust the analysis parameters.
+            </p>
+          </div>
+        ) : (
+          <>
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">
+              Shortlisted Trading Opportunities ({shortlistedCoins.length})
+            </h2>
+            <div className="text-black grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {shortlistedCoins.map((coin) => (
+                <CryptoCard
+                  key={coin.symbol}
+                  analysis={coin}
+                  onClick={handleCoinClick}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Refreshing indicator when auto-refresh is on */}
+        {loading && shortlistedCoins.length > 0 && (
+          <div className="fixed bottom-4 right-4 bg-white rounded-full shadow-lg p-2">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+          </div>
+        )}
+
+        {/* Coin detail modal */}
+        {selectedCoin && (
+          <CoinDetailModal
+            isOpen={modalOpen}
+            onClose={closeModal}
+            symbol={selectedCoin}
+            currentPrice={priceData[selectedCoin] || 0}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+        )}
+      </div>
+    </main>
   );
 }
