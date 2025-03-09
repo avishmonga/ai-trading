@@ -1,8 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   TradeRecommendation as TradeRecommendationType,
   AIProvider,
+  Currency,
+  TradeOrder,
+  TradeExecution,
 } from '@/types';
+import TradeExecutionForm from './TradeExecutionForm';
+import CurrencySelector from './CurrencySelector';
+import { convertCurrency } from '@/lib/tradeExecutionService';
 
 interface TradeRecommendationProps {
   recommendation: TradeRecommendationType;
@@ -22,14 +28,24 @@ const TradeRecommendation: React.FC<TradeRecommendationProps> = ({
     provider = AIProvider.OpenAI, // Default to OpenAI if not specified
   } = recommendation;
 
+  const [showTradeForm, setShowTradeForm] = useState(false);
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>(
+    Currency.USD
+  );
+
   // Format currency
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
+    const currencySymbol = selectedCurrency === Currency.USD ? '$' : '₹';
+    const convertedValue =
+      selectedCurrency === Currency.INR
+        ? convertCurrency(value, 'USD', 'INR')
+        : value;
+
+    // Use the currencySymbol directly instead of relying on Intl.NumberFormat
+    return `${currencySymbol}${convertedValue?.toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 6,
-    }).format(value);
+    })}`;
   };
 
   // Calculate potential profit and loss percentages
@@ -53,14 +69,48 @@ const TradeRecommendation: React.FC<TradeRecommendationProps> = ({
     return provider === AIProvider.OpenAI ? 'GPT-3.5 Turbo' : 'Gemini 1.5 Pro';
   };
 
+  // Execute trade
+  const executeTrade = async (order: TradeOrder): Promise<TradeExecution> => {
+    try {
+      const response = await fetch('/api/trade', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(order),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          `Failed to execute trade: ${response.status} ${
+            response.statusText
+          }. ${errorData.error || ''}`
+        );
+      }
+
+      const data = await response.json();
+      return data.trade;
+    } catch (error) {
+      console.error('Error executing trade:', error);
+      throw error;
+    }
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-xl font-bold text-gray-800">
           AI Trade Recommendation for {symbol}
         </h3>
-        <div className={`text-sm font-semibold ${getConfidenceColor()}`}>
-          Confidence: {Math.round(confidence * 100)}%
+        <div className="flex items-center space-x-4">
+          <CurrencySelector
+            selectedCurrency={selectedCurrency}
+            onCurrencyChange={setSelectedCurrency}
+          />
+          <div className={`text-sm font-semibold ${getConfidenceColor()}`}>
+            Confidence: {Math.round(confidence * 100)}%
+          </div>
         </div>
       </div>
 
@@ -99,7 +149,9 @@ const TradeRecommendation: React.FC<TradeRecommendationProps> = ({
             Risk/Reward Ratio
           </h4>
           <p className="text-lg font-mono text-blue-600">
-            1:{riskRewardRatio.toFixed(2)}
+            {riskRewardRatio === null
+              ? '-'
+              : `1: ${riskRewardRatio.toFixed(2)}`}
           </p>
         </div>
       </div>
@@ -113,16 +165,36 @@ const TradeRecommendation: React.FC<TradeRecommendationProps> = ({
         </div>
       </div>
 
-      <div className="mt-6 text-xs text-gray-500">
-        <p>
-          <strong>Note:</strong> This is an AI-generated recommendation for
-          intraday trading only. Always do your own research and consider your
-          risk tolerance before trading.
-        </p>
-        <p className="mt-1">
-          <strong>Powered by:</strong> {getProviderName()} ({getModelName()})
-        </p>
+      <div className="mt-6 flex justify-between items-center">
+        <div className="text-xs text-gray-500">
+          <p>
+            <strong>Note:</strong> This is an AI-generated recommendation for
+            intraday trading only. Always do your own research and consider your
+            risk tolerance before trading.
+          </p>
+          <p className="mt-1">
+            <strong>Powered by:</strong> {getProviderName()} ({getModelName()})
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowTradeForm(!showTradeForm)}
+          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          {showTradeForm ? 'Hide Trade Form' : 'Execute Trade'}
+        </button>
       </div>
+
+      {showTradeForm && (
+        <div className="mt-6">
+          <TradeExecutionForm
+            recommendation={recommendation}
+            onExecuteTrade={executeTrade}
+            defaultCurrency={selectedCurrency}
+          />
+        </div>
+      )}
     </div>
   );
 };

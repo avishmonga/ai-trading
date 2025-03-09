@@ -31,6 +31,50 @@ export enum AIProvider {
   Gemini = 'gemini',
 }
 
+export enum Currency {
+  USD = 'USD',
+  INR = 'INR',
+}
+
+export enum OrderType {
+  Buy = 'buy',
+  Sell = 'sell',
+}
+
+export enum OrderStatus {
+  Pending = 'pending',
+  Executed = 'executed',
+  Failed = 'failed',
+  Cancelled = 'cancelled',
+  PartiallyFilled = 'partially_filled',
+}
+
+export interface TradeOrder {
+  symbol: string;
+  type: OrderType;
+  price: number;
+  quantity: number;
+  stopLoss: number;
+  takeProfit: number;
+  budget: number;
+  currency: Currency;
+}
+
+export interface TradeExecution {
+  orderId: string;
+  symbol: string;
+  type: OrderType;
+  price: number;
+  quantity: number;
+  status: OrderStatus;
+  timestamp: number;
+  stopLoss: number;
+  takeProfit: number;
+  budget: number;
+  currency: Currency;
+  message: string;
+}
+
 export interface TradeRecommendation {
   symbol: string;
   entryPrice: number;
@@ -61,4 +105,18 @@ export interface AIUsageMetrics {
   completionTokens: number;
   estimatedCost: number;
   timestamp: number;
+}
+
+export interface UserSettings {
+  defaultCurrency: Currency;
+  defaultBudget: number;
+  defaultAIProvider: AIProvider;
+}
+
+export interface TradeHistory {
+  trades: TradeExecution[];
+  totalProfit: number;
+  totalLoss: number;
+  winRate: number;
+  currency: Currency;
 }
