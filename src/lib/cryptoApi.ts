@@ -5,7 +5,7 @@ import { CryptoData, HistoricalData } from '../types';
 const API_BASE_URL = 'https://api.binance.com/api/v3';
 
 // List of top cryptocurrencies to monitor (using Binance trading pairs with USDT)
-const TOP_COINS = [
+export const TOP_COINS = [
   'BTCUSDT',
   'ETHUSDT',
   'XRPUSDT',
@@ -24,8 +24,17 @@ const TOP_COINS = [
   'SHIBUSDT',
 ];
 
+// Default coins for the watchlist
+export const DEFAULT_WATCHLIST = [
+  'BTCUSDT',
+  'ETHUSDT',
+  'SOLUSDT',
+  'BNBUSDT',
+  'ADAUSDT',
+];
+
 // Map of symbols to their full names for better display
-const COIN_NAMES: Record<string, string> = {
+export const COIN_NAMES: Record<string, string> = {
   BTC: 'Bitcoin',
   ETH: 'Ethereum',
   XRP: 'Ripple',
@@ -42,23 +51,55 @@ const COIN_NAMES: Record<string, string> = {
   ATOM: 'Cosmos',
   TRX: 'Tron',
   SHIB: 'Shiba Inu',
+  BNB: 'Binance Coin',
 };
+
+/**
+ * Fetch all available USDT trading pairs from Binance
+ */
+export async function fetchAllCoins(): Promise<string[]> {
+  try {
+    // Fetch exchange information
+    const response = await axios.get(`${API_BASE_URL}/exchangeInfo`);
+
+    // Filter for USDT trading pairs
+    const symbols = response.data.symbols
+      .filter(
+        (symbol: any) =>
+          symbol.status === 'TRADING' &&
+          symbol.quoteAsset === 'USDT' &&
+          !symbol.symbol.includes('UP') &&
+          !symbol.symbol.includes('DOWN') &&
+          !symbol.symbol.includes('BEAR') &&
+          !symbol.symbol.includes('BULL')
+      )
+      .map((symbol: any) => symbol.symbol);
+
+    return symbols;
+  } catch (error) {
+    console.error('Error fetching available coins:', error);
+    // Return TOP_COINS as fallback
+    return TOP_COINS;
+  }
+}
 
 /**
  * Fetch current price data for multiple coins
  */
-export async function fetchCurrentPrices(): Promise<CryptoData[]> {
+export async function fetchCurrentPrices(
+  symbols = TOP_COINS
+): Promise<CryptoData[]> {
   try {
     // Fetch 24hr ticker price change statistics for all symbols
     const response = await axios.get(`${API_BASE_URL}/ticker/24hr`);
 
-    // Filter for our top coins and map to our data structure
+    // Filter for our specified coins and map to our data structure
     const allSymbols = response.data;
-    const topCoinsData = allSymbols.filter((ticker: any) =>
-      TOP_COINS.includes(ticker.symbol)
+    const filteredCoinsData = allSymbols.filter((ticker: any) =>
+      symbols.includes(ticker.symbol)
     );
 
-    return topCoinsData.map((ticker: any) => {
+    return filteredCoinsData.map((ticker: any) => {
       const symbol = ticker.symbol.replace('USDT', '');
       return {
         symbol: symbol,

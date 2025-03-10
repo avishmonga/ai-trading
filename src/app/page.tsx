@@ -1,27 +1,37 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import CryptoCard from '@/components/CryptoCard';
 import CoinDetailModal from '@/components/CoinDetailModal';
 import PaperTradingAccount from '@/components/PaperTradingAccount';
+import { useWatchlist } from '@/contexts/WatchlistContext';
 import { CoinAnalysis, CryptoData, Currency } from '@/types';
 
 export default function Home() {
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [shortlistedCoins, setShortlistedCoins] = useState<CoinAnalysis[]>([]);
   const [priceData, setPriceData] = useState<Record<string, number>>({});
-  const [selectedCoin, setSelectedCoin] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedCoin, setSelectedCoin] = useState<string | null>(
+    searchParams.get('coin')
+  );
+  const [modalOpen, setModalOpen] = useState(!!selectedCoin);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [selectedCurrency, setSelectedCurrency] = useState<Currency>(
     Currency.USD
   );
+  const { watchlist, isLoading: isWatchlistLoading } = useWatchlist();
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   // Fetch data on component mount and when autoRefresh is enabled
   useEffect(() => {
-    fetchData();
+    if (!isWatchlistLoading) {
+      fetchData();
+    }
 
     // Set up auto-refresh every 5 minutes if enabled
     let intervalId: NodeJS.Timeout | null = null;
@@ -32,10 +42,13 @@ export default function Home() {
     return () => {
       if (intervalId) clearInterval(intervalId);
     };
-  }, [autoRefresh]);
+  }, [autoRefresh, watchlist, isWatchlistLoading]);
 
   const fetchData = async () => {
-    setLoading(true);
+    // Don't set loading to true on subsequent refreshes if we already have data
+    if (!initialLoadComplete) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -74,8 +87,33 @@ export default function Home() {
 
       const analysisData = await analysisResponse.json();
 
-      setShortlistedCoins(analysisData.shortlistedCoins);
+      // Keep previous data until new data is ready
+      const previousCoins = [...shortlistedCoins];
+
+      // Filter shortlisted coins based on watchlist
+      if (watchlist.length > 0) {
+        const watchlistSymbols = watchlist.map((symbol) =>
+          symbol.replace('USDT', '')
+        );
+        const filteredCoins = analysisData.shortlistedCoins.filter(
+          (coin: CoinAnalysis) => watchlistSymbols.includes(coin.symbol)
+        );
+
+        // Only update if we have new data or if this is the initial load
+        if (filteredCoins.length > 0 || !initialLoadComplete) {
+          setShortlistedCoins(filteredCoins);
+        } else if (previousCoins.length > 0) {
+          // Keep previous data if new data is empty but we had data before
+          // This prevents the "No coins" message from flashing
+        } else {
+          setShortlistedCoins(filteredCoins);
+        }
+      } else {
+        setShortlistedCoins(analysisData.shortlistedCoins);
+      }
+
       setLastUpdated(new Date());
+      setInitialLoadComplete(true);
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'An unknown error occurred';
@@ -126,9 +164,22 @@ export default function Home() {
       SOL: 150,
     };
 
-    setShortlistedCoins(sampleCoins);
+    // Filter sample data based on watchlist if available
+    if (watchlist.length > 0) {
+      const watchlistSymbols = watchlist.map((symbol) =>
+        symbol.replace('USDT', '')
+      );
+      const filteredCoins = sampleCoins.filter((coin) =>
+        watchlistSymbols.includes(coin.symbol)
+      );
+      setShortlistedCoins(filteredCoins);
+    } else {
+      setShortlistedCoins(sampleCoins);
+    }
+
     setPriceData(samplePrices);
     setLastUpdated(new Date());
+    setInitialLoadComplete(true);
   };
 
   const handleCoinClick = (symbol: string) => {
@@ -141,8 +192,12 @@ export default function Home() {
     setSelectedCoin(null);
   };
 
+  // Determine if we should show the "No coins" message
+  const shouldShowNoCoinsMessage =
+    !loading && shortlistedCoins.length === 0 && initialLoadComplete;
+
   return (
-    <main className="min-h-screen p-4 md:p-8 bg-gray-50">
+    <div className="p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
           <div>
@@ -188,49 +243,102 @@ export default function Home() {
           <PaperTradingAccount selectedCurrency={selectedCurrency} />
         </div>
 
-        {error ? (
-          <div className="bg-red-50 p-4 rounded-md mb-8">
-            <p className="text-red-600 mb-4">{error}</p>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <button
-                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
-                onClick={fetchData}
-              >
-                Retry
-              </button>
-              <button
-                className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
-                onClick={provideSampleData}
-              >
-                Use Sample Data
-              </button>
-            </div>
+        {/* Watchlist Link */}
+        <div className="mb-8">
+          <div className="flex justify-between items-center">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">
+              Watchlist
+            </h2>
+            <Link
+              href="/watchlist"
+              className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700 transition-colors"
+            >
+              Manage Watchlist
+            </Link>
           </div>
-        ) : loading ? (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {shortlistedCoins.map((coin) => (
-                <CryptoCard
-                  key={coin.symbol}
-                  coin={coin}
-                  price={priceData[coin.symbol] || 0}
-                  onClick={() => handleCoinClick(coin.symbol)}
-                  currency={selectedCurrency}
-                />
-              ))}
-            </div>
-
-            {lastUpdated && (
-              <p className="text-xs text-gray-500 mt-8 text-center">
-                Last updated: {lastUpdated.toLocaleString()}
-              </p>
+          <div className="bg-white rounded-lg shadow-lg p-6">
+            {isWatchlistLoading ? (
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-500 mr-2"></div>
+                <span className="text-gray-600">Loading watchlist...</span>
+              </div>
+            ) : watchlist.length === 0 ? (
+              <div className="text-gray-600">
+                Your watchlist is empty. Add coins to get personalized
+                recommendations.
+              </div>
+            ) : (
+              <div className="text-gray-600">
+                You are tracking {watchlist.length} coins. AI recommendations
+                are based on your watchlist.
+              </div>
             )}
-          </>
-        )}
+          </div>
+        </div>
+
+        {/* Shortlisted Coins */}
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">
+            AI Recommendations
+          </h2>
+
+          {error ? (
+            <div className="bg-red-50 p-4 rounded-md mb-8">
+              <p className="text-red-600 mb-4">{error}</p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
+                  onClick={fetchData}
+                >
+                  Retry
+                </button>
+                <button
+                  className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
+                  onClick={provideSampleData}
+                >
+                  Use Sample Data
+                </button>
+              </div>
+            </div>
+          ) : loading && !initialLoadComplete ? (
+            <div className="flex justify-center items-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+            </div>
+          ) : shouldShowNoCoinsMessage ? (
+            <div className="bg-yellow-50 p-4 rounded-md">
+              <p className="text-yellow-700">
+                No coins from your watchlist have AI recommendations at this
+                time. Add more coins to your watchlist or check back later.
+              </p>
+            </div>
+          ) : (
+            <>
+              {loading && initialLoadComplete && (
+                <div className="flex justify-end mb-4">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-500 mr-2"></div>
+                  <span className="text-sm text-gray-500">Refreshing...</span>
+                </div>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {shortlistedCoins.map((coin) => (
+                  <CryptoCard
+                    key={coin.symbol}
+                    coin={coin}
+                    price={priceData[coin.symbol] || 0}
+                    onClick={() => handleCoinClick(coin.symbol)}
+                    currency={selectedCurrency}
+                  />
+                ))}
+              </div>
+
+              {lastUpdated && (
+                <p className="text-xs text-gray-500 mt-8 text-center">
+                  Last updated: {lastUpdated.toLocaleString()}
+                </p>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {selectedCoin && (
@@ -241,6 +349,6 @@ export default function Home() {
           currentPrice={priceData[selectedCoin] || 0}
         />
       )}
-    </main>
+    </div>
   );
 }
