@@ -49,6 +49,12 @@ export enum OrderStatus {
   PartiallyFilled = 'partially_filled',
 }
 
+export interface TradeFee {
+  amount: number;
+  asset: string;
+  rate: number;
+}
+
 export interface TradeOrder {
   symbol: string;
   type: OrderType;
@@ -58,6 +64,7 @@ export interface TradeOrder {
   takeProfit: number;
   budget: number;
   currency: Currency;
+  useBnbForFees?: boolean;
 }
 
 export interface TradeExecution {
@@ -73,6 +80,11 @@ export interface TradeExecution {
   budget: number;
   currency: Currency;
   message: string;
+  fee?: TradeFee;
+  currentPnL?: number;
+  currentPnLPercentage?: number;
+  pnl?: number;
+  pnlPercentage?: number;
 }
 
 export interface TradeRecommendation {
@@ -111,12 +123,51 @@ export interface UserSettings {
   defaultCurrency: Currency;
   defaultBudget: number;
   defaultAIProvider: AIProvider;
+  useBnbForFees: boolean;
+  apiKey?: string;
+  apiSecret?: string;
 }
 
 export interface TradeHistory {
   trades: TradeExecution[];
   totalProfit: number;
   totalLoss: number;
+  totalFees: number;
   winRate: number;
   currency: Currency;
+}
+
+export interface DepositWithdrawalHistory {
+  deposits: DepositRecord[];
+  withdrawals: WithdrawalRecord[];
+  totalDeposited: number;
+  totalWithdrawn: number;
+  currency: Currency;
+}
+
+export interface DepositRecord {
+  id: string;
+  asset: string;
+  amount: number;
+  timestamp: number;
+  currency: Currency;
+}
+
+export interface WithdrawalRecord {
+  id: string;
+  asset: string;
+  amount: number;
+  timestamp: number;
+  currency: Currency;
+}
+
+export interface PaperTradingAccount {
+  balances: Record<string, number>;
+  prices: Record<string, number>;
+  activeTrades: TradeExecution[];
+  tradeHistory: TradeExecution[];
+  deposits: DepositRecord[];
+  withdrawals: WithdrawalRecord[];
+  totalValueUSD: number;
+  totalProfitLoss: number;
 }

@@ -13,6 +13,7 @@ import {
   calculatePotentialProfit,
   calculatePotentialLoss,
   calculateProfitLossPercentage,
+  calculateTradingFees,
 } from '../lib/tradeExecutionService';
 
 interface TradeExecutionFormProps {
@@ -38,12 +39,19 @@ export default function TradeExecutionForm({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<TradeExecution | null>(null);
+  const [useBnbForFees, setUseBnbForFees] = useState<boolean>(false);
 
   // Potential profit and loss calculations
   const [potentialProfit, setPotentialProfit] = useState<number>(0);
   const [potentialLoss, setPotentialLoss] = useState<number>(0);
   const [profitPercentage, setProfitPercentage] = useState<number>(0);
   const [lossPercentage, setLossPercentage] = useState<number>(0);
+
+  // Fee calculations
+  const [entryFee, setEntryFee] = useState<number>(0);
+  const [exitFee, setExitFee] = useState<number>(0);
+  const [totalFees, setTotalFees] = useState<number>(0);
+  const [feeRate, setFeeRate] = useState<number>(0.001); // Default 0.1%
 
   // Calculate quantity based on budget and price
   useEffect(() => {
@@ -66,6 +74,36 @@ export default function TradeExecutionForm({
     setTakeProfit(recommendation.targetPrice);
   }, [recommendation]);
 
+  // Calculate fees
+  useEffect(() => {
+    // Calculate entry value
+    const entryValue = recommendation.entryPrice * quantity;
+
+    // Calculate exit values
+    const takeProfitValue = takeProfit * quantity;
+    const stopLossValue = stopLoss * quantity;
+
+    // Apply BNB discount if applicable
+    const effectiveFeeRate = useBnbForFees ? feeRate * 0.75 : feeRate;
+
+    // Calculate fees
+    const calculatedEntryFee = entryValue * effectiveFeeRate;
+    const takeProfitFee = takeProfitValue * effectiveFeeRate;
+    const stopLossFee = stopLossValue * effectiveFeeRate;
+
+    // Set fee states
+    setEntryFee(calculatedEntryFee);
+    setExitFee(Math.max(takeProfitFee, stopLossFee)); // Use the higher of the two for display
+    setTotalFees(calculatedEntryFee + Math.max(takeProfitFee, stopLossFee));
+  }, [
+    quantity,
+    recommendation.entryPrice,
+    takeProfit,
+    stopLoss,
+    feeRate,
+    useBnbForFees,
+  ]);
+
   // Calculate potential profit and loss
   useEffect(() => {
     // Calculate base quantity in USD
@@ -79,13 +117,17 @@ export default function TradeExecutionForm({
       recommendation.entryPrice
     );
 
+    // Apply BNB discount if applicable
+    const effectiveFeeRate = useBnbForFees ? feeRate * 0.75 : feeRate;
+
     // Calculate profit and loss using helper functions
     const profit = calculatePotentialProfit(
       recommendation.entryPrice,
       takeProfit,
       calculatedQuantity,
       'USD',
-      currency
+      currency,
+      effectiveFeeRate
     );
 
     const loss = calculatePotentialLoss(
@@ -93,7 +135,8 @@ export default function TradeExecutionForm({
       stopLoss,
       calculatedQuantity,
       'USD',
-      currency
+      currency,
+      effectiveFeeRate
     );
 
     setPotentialProfit(profit);
@@ -105,7 +148,15 @@ export default function TradeExecutionForm({
 
     setProfitPercentage(profitPct);
     setLossPercentage(lossPct);
-  }, [takeProfit, stopLoss, recommendation.entryPrice, currency, budget]);
+  }, [
+    takeProfit,
+    stopLoss,
+    recommendation.entryPrice,
+    currency,
+    budget,
+    feeRate,
+    useBnbForFees,
+  ]);
 
   // Format currency based on selected currency
   const formatCurrency = (value: number) => {
@@ -142,6 +193,7 @@ export default function TradeExecutionForm({
         takeProfit,
         budget: budgetInUSD, // Use USD value for backend
         currency, // Keep track of user's preferred currency
+        useBnbForFees,
       };
 
       // Execute trade
@@ -184,9 +236,17 @@ export default function TradeExecutionForm({
             {success.type.toUpperCase()} {success.quantity.toFixed(8)}{' '}
             {success.symbol} at {formatCurrency(success.price)}
           </p>
-          <p className="text-sm text-green-700">
+          <p className="text-sm text-green-700 mb-1">
             Total: {formatCurrency(success.price * success.quantity)}
           </p>
+
+          {success.fee && (
+            <p className="text-sm text-amber-700 mb-1">
+              Fee: {formatCurrency(success.fee.amount)} (
+              {(success.fee.rate * 100).toFixed(2)}%)
+            </p>
+          )}
+
           <div className="mt-3">
             <button
               type="button"
@@ -341,6 +401,43 @@ export default function TradeExecutionForm({
               </div>
             </div>
 
+            <div className="bg-amber-50 p-3 rounded-md">
+              <h4 className="text-sm font-semibold text-amber-800 mb-1">
+                Trading Fees
+              </h4>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="text-gray-600">Fee Rate:</div>
+                <div className="font-medium">{(feeRate * 100).toFixed(2)}%</div>
+
+                <div className="text-gray-600">Entry Fee:</div>
+                <div className="font-medium">{formatCurrency(entryFee)}</div>
+
+                <div className="text-gray-600">Exit Fee:</div>
+                <div className="font-medium">{formatCurrency(exitFee)}</div>
+
+                <div className="text-gray-600">Total Fees:</div>
+                <div className="font-medium text-amber-600">
+                  {formatCurrency(totalFees)}
+                </div>
+              </div>
+
+              <div className="mt-2 flex items-center">
+                <input
+                  id="useBnbForFees"
+                  type="checkbox"
+                  checked={useBnbForFees}
+                  onChange={(e) => setUseBnbForFees(e.target.checked)}
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                />
+                <label
+                  htmlFor="useBnbForFees"
+                  className="ml-2 block text-xs text-gray-700"
+                >
+                  Use BNB for fees (25% discount)
+                </label>
+              </div>
+            </div>
+
             <div className="bg-blue-50 p-3 rounded-md">
               <h4 className="text-sm font-semibold text-blue-800 mb-1">
                 Trade Summary
@@ -353,6 +450,11 @@ export default function TradeExecutionForm({
 
                 <div className="text-gray-600">Investment:</div>
                 <div className="font-medium">{formatCurrency(budget)}</div>
+
+                <div className="text-gray-600">Trading Fees:</div>
+                <div className="font-medium text-amber-600">
+                  {formatCurrency(totalFees)}
+                </div>
 
                 <div className="text-gray-600">Potential Return:</div>
                 <div className="font-medium text-green-600">

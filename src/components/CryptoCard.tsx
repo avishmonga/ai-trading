@@ -1,13 +1,21 @@
 import React from 'react';
-import { CoinAnalysis } from '@/types';
+import { CoinAnalysis, Currency } from '@/types';
+import { convertCurrency } from '@/lib/tradeExecutionService';
 
 interface CryptoCardProps {
-  analysis: CoinAnalysis;
-  onClick: (symbol: string) => void;
+  coin: CoinAnalysis;
+  price: number;
+  onClick: () => void;
+  currency: Currency;
 }
 
-const CryptoCard: React.FC<CryptoCardProps> = ({ analysis, onClick }) => {
-  const { symbol, score, trend, volatility, recommendation } = analysis;
+const CryptoCard: React.FC<CryptoCardProps> = ({
+  coin,
+  price,
+  onClick,
+  currency,
+}) => {
+  const { symbol, score, trend, volatility, recommendation } = coin;
 
   // Determine color based on recommendation
   const getBgColor = () => {
@@ -27,84 +35,114 @@ const CryptoCard: React.FC<CryptoCardProps> = ({ analysis, onClick }) => {
       case 'bullish':
         return (
           <svg
+            className="w-5 h-5 text-green-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
             xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 text-green-600"
-            viewBox="0 0 20 20"
-            fill="currentColor"
           >
             <path
-              fillRule="evenodd"
-              d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z"
-              clipRule="evenodd"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
             />
           </svg>
         );
       case 'bearish':
         return (
           <svg
+            className="w-5 h-5 text-red-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
             xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 text-red-600"
-            viewBox="0 0 20 20"
-            fill="currentColor"
           >
             <path
-              fillRule="evenodd"
-              d="M12 13a1 1 0 100 2h5a1 1 0 001-1v-5a1 1 0 10-2 0v2.586l-4.293-4.293a1 1 0 00-1.414 0L8 9.586l-4.293-4.293a1 1 0 00-1.414 1.414l5 5a1 1 0 001.414 0L11 9.414 14.586 13H12z"
-              clipRule="evenodd"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 17h8m0 0v-8m0 8l-8-8-4 4-6-6"
             />
           </svg>
         );
       default:
         return (
           <svg
+            className="w-5 h-5 text-gray-600"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
             xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 text-gray-600"
-            viewBox="0 0 20 20"
-            fill="currentColor"
           >
             <path
-              fillRule="evenodd"
-              d="M7.707 10.293a1 1 0 100 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 12.586V6a1 1 0 10-2 0v6.586l-1.293-1.293a1 1 0 00-1.414 0z"
-              clipRule="evenodd"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 12h14"
             />
           </svg>
         );
     }
   };
 
+  // Format currency
+  const formatCurrency = (value: number) => {
+    const currencySymbol = currency === Currency.USD ? '$' : '₹';
+    const convertedValue =
+      currency === Currency.INR ? convertCurrency(value, 'USD', 'INR') : value;
+
+    return `${currencySymbol}${convertedValue.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
   return (
     <div
-      className={`rounded-lg border-2 p-4 shadow-md cursor-pointer transition-transform hover:scale-105 ${getBgColor()}`}
-      onClick={() => onClick(symbol)}
+      className={`rounded-lg border p-4 cursor-pointer transition-all hover:shadow-md ${getBgColor()}`}
+      onClick={onClick}
     >
       <div className="flex justify-between items-center mb-2">
         <h3 className="text-lg font-bold">{symbol}</h3>
-        {getTrendIcon()}
+        <div className="flex items-center space-x-1">
+          <span className="text-sm font-medium">
+            {trend.charAt(0).toUpperCase() + trend.slice(1)}
+          </span>
+          {getTrendIcon()}
+        </div>
+      </div>
+
+      <div className="mb-3">
+        <div className="text-2xl font-bold">{formatCurrency(price)}</div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-sm">
         <div>
-          <span className="font-semibold">Score:</span>{' '}
-          <span className="font-mono">{score}</span>
+          <span className="text-gray-600">Score:</span>
+          <div className="font-medium">{score.toFixed(2)}</div>
         </div>
         <div>
-          <span className="font-semibold">Volatility:</span>{' '}
-          <span className="capitalize">{volatility}</span>
+          <span className="text-gray-600">Volatility:</span>
+          <div className="font-medium capitalize">{volatility}</div>
         </div>
       </div>
 
-      <div className="mt-3 text-center">
-        <span
-          className={`inline-block px-3 py-1 rounded-full font-semibold capitalize ${
-            recommendation === 'buy'
-              ? 'bg-green-500 text-white'
-              : recommendation === 'sell'
-              ? 'bg-red-500 text-white'
-              : 'bg-gray-500 text-white'
-          }`}
-        >
-          {recommendation}
-        </span>
+      <div className="mt-3 pt-3 border-t border-gray-200">
+        <div className="flex justify-between items-center">
+          <span className="text-gray-600">Recommendation:</span>
+          <span
+            className={`font-medium capitalize px-2 py-1 rounded-full text-xs ${
+              recommendation === 'buy'
+                ? 'bg-green-200 text-green-800'
+                : recommendation === 'sell'
+                ? 'bg-red-200 text-red-800'
+                : 'bg-gray-200 text-gray-800'
+            }`}
+          >
+            {recommendation}
+          </span>
+        </div>
       </div>
     </div>
   );

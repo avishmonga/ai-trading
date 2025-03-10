@@ -1,44 +1,70 @@
+import { TradeOrder, TradeExecution } from '../types';
 import {
-  TradeOrder,
-  OrderStatus,
-  OrderType,
-  TradeExecution,
-  Currency,
-} from '../types';
+  executePaperTrade,
+  cancelPaperTrade,
+  getActivePaperTrades,
+} from './paperTradingService';
+
+// Trading mode
+export enum TradingMode {
+  Paper = 'paper',
+  Live = 'live',
+}
+
+// Initialize trading mode from environment variables if available
+// Default to paper trading for safety
+let currentTradingMode: TradingMode = TradingMode.Paper;
+
+// Initialize trading mode when the module is loaded
+if (typeof process !== 'undefined' && process.env) {
+  const envTradingMode =
+    process.env.NEXT_PUBLIC_TRADING_MODE || process.env.TRADING_MODE;
+  if (envTradingMode === 'live') {
+    currentTradingMode = TradingMode.Live;
+  } else {
+    currentTradingMode = TradingMode.Paper;
+  }
+  console.log(
+    `Trading mode initialized from environment: ${currentTradingMode}`
+  );
+} else {
+  console.log(`Using default trading mode: ${currentTradingMode}`);
+}
+
+/**
+ * Set the trading mode
+ */
+export function setTradingMode(mode: TradingMode): void {
+  currentTradingMode = mode;
+  console.log(`Trading mode set to: ${mode}`);
+}
+
+/**
+ * Get the current trading mode
+ */
+export function getTradingMode(): TradingMode {
+  return currentTradingMode;
+}
 
 /**
  * Execute a trade order
- * In a real application, this would connect to a trading API
+ * Uses paper trading by default
  */
 export async function executeTradeOrder(
   order: TradeOrder
 ): Promise<TradeExecution> {
   try {
-    // In a real application, this would call an actual trading API
-    // For now, we'll simulate a successful trade execution
+    // Always use paper trading for now
+    console.log(`Executing ${currentTradingMode} trade for ${order.symbol}...`);
 
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // In the future, we can add support for live trading
+    // if (currentTradingMode === TradingMode.Live) {
+    //   // Execute live trade using Binance API
+    // } else {
+    //   // Execute paper trade
+    // }
 
-    // Generate a unique order ID
-    const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-    return {
-      orderId,
-      symbol: order.symbol,
-      type: order.type,
-      price: order.price,
-      quantity: order.quantity,
-      status: OrderStatus.Executed,
-      timestamp: Date.now(),
-      stopLoss: order.stopLoss,
-      takeProfit: order.takeProfit,
-      budget: order.budget,
-      currency: order.currency,
-      message: `${
-        order.type === OrderType.Buy ? 'Buy' : 'Sell'
-      } order executed successfully`,
-    };
+    return await executePaperTrade(order);
   } catch (error) {
     console.error('Error executing trade:', error);
     throw new Error(
@@ -54,27 +80,17 @@ export async function executeTradeOrder(
  */
 export async function getTradeStatus(orderId: string): Promise<TradeExecution> {
   try {
-    // In a real application, this would call an actual trading API
-    // For now, we'll simulate a successful status check
+    // Get active paper trades
+    const activeTrades = getActivePaperTrades();
 
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    // Find the trade
+    const trade = activeTrades.find((trade) => trade.orderId === orderId);
 
-    // For demo purposes, we'll return a mock response
-    return {
-      orderId,
-      symbol: 'BTC',
-      type: OrderType.Buy,
-      price: 50000,
-      quantity: 0.1,
-      status: OrderStatus.Executed,
-      timestamp: Date.now() - 3600000, // 1 hour ago
-      stopLoss: 48000,
-      takeProfit: 55000,
-      budget: 5000,
-      currency: Currency.USD,
-      message: 'Order executed successfully',
-    };
+    if (!trade) {
+      throw new Error(`Trade with order ID ${orderId} not found`);
+    }
+
+    return trade;
   } catch (error) {
     console.error('Error getting trade status:', error);
     throw new Error(
@@ -92,26 +108,11 @@ export async function cancelTradeOrder(
   orderId: string
 ): Promise<TradeExecution> {
   try {
-    // In a real application, this would call an actual trading API
-    // For now, we'll simulate a successful cancellation
-
-    // Simulate API call delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    return {
-      orderId,
-      symbol: 'BTC',
-      type: OrderType.Buy,
-      price: 50000,
-      quantity: 0.1,
-      status: OrderStatus.Cancelled,
-      timestamp: Date.now(),
-      stopLoss: 48000,
-      takeProfit: 55000,
-      budget: 5000,
-      currency: Currency.USD,
-      message: 'Order cancelled successfully',
-    };
+    // Always use paper trading for now
+    console.log(
+      `Cancelling ${currentTradingMode} trade with order ID ${orderId}...`
+    );
+    return await cancelPaperTrade(orderId);
   } catch (error) {
     console.error('Error cancelling trade:', error);
     throw new Error(
@@ -124,7 +125,6 @@ export async function cancelTradeOrder(
 
 /**
  * Calculate the quantity based on budget and price
- * This function assumes budget is already in the same currency as price (USD)
  */
 export function calculateQuantity(budget: number, price: number): number {
   if (price <= 0) return 0;
@@ -133,16 +133,27 @@ export function calculateQuantity(budget: number, price: number): number {
 
 /**
  * Calculate potential profit based on entry price, target price, quantity, and currency
+ * Includes trading fees in the calculation
  */
 export function calculatePotentialProfit(
   entryPrice: number,
   targetPrice: number,
   quantity: number,
   fromCurrency: string = 'USD',
-  toCurrency: string = 'USD'
+  toCurrency: string = 'USD',
+  feeRate: number = 0.001 // Default 0.1% fee
 ): number {
   // Calculate profit in source currency
-  const profitInSourceCurrency = (targetPrice - entryPrice) * quantity;
+  const entryValue = entryPrice * quantity;
+  const targetValue = targetPrice * quantity;
+
+  // Calculate fees
+  const entryFee = entryValue * feeRate;
+  const targetFee = targetValue * feeRate;
+
+  // Calculate net profit (after fees)
+  const profitInSourceCurrency =
+    targetValue - entryValue - (entryFee + targetFee);
 
   // Convert to target currency if needed
   if (fromCurrency !== toCurrency) {
@@ -154,16 +165,27 @@ export function calculatePotentialProfit(
 
 /**
  * Calculate potential loss based on entry price, stop loss, quantity, and currency
+ * Includes trading fees in the calculation
  */
 export function calculatePotentialLoss(
   entryPrice: number,
   stopLoss: number,
   quantity: number,
   fromCurrency: string = 'USD',
-  toCurrency: string = 'USD'
+  toCurrency: string = 'USD',
+  feeRate: number = 0.001 // Default 0.1% fee
 ): number {
-  // Calculate loss in source currency
-  const lossInSourceCurrency = (entryPrice - stopLoss) * quantity;
+  // Calculate values
+  const entryValue = entryPrice * quantity;
+  const stopLossValue = stopLoss * quantity;
+
+  // Calculate fees
+  const entryFee = entryValue * feeRate;
+  const stopLossFee = stopLossValue * feeRate;
+
+  // Calculate net loss (after fees)
+  const lossInSourceCurrency =
+    entryValue - stopLossValue + (entryFee + stopLossFee);
 
   // Convert to target currency if needed
   if (fromCurrency !== toCurrency) {
@@ -171,6 +193,20 @@ export function calculatePotentialLoss(
   }
 
   return lossInSourceCurrency;
+}
+
+/**
+ * Calculate trading fees for a given order value
+ */
+export function calculateTradingFees(
+  orderValue: number,
+  feeRate: number = 0.001, // Default 0.1% fee
+  useBnbForFees: boolean = false
+): number {
+  // Apply BNB discount if applicable
+  const effectiveFeeRate = useBnbForFees ? feeRate * 0.75 : feeRate; // 25% discount with BNB
+
+  return orderValue * effectiveFeeRate;
 }
 
 /**

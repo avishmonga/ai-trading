@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import BinanceInitializer from '../components/BinanceInitializer';
+import Navbar from '../components/Navbar';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -20,7 +22,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <BinanceInitializer />
+        <Navbar />
+        <main className="min-h-screen bg-gray-50">{children}</main>
+      </body>
     </html>
   );
 }

@@ -22,6 +22,7 @@ export default function ActiveTrades({
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>(
     {}
   );
+  const [totalFees, setTotalFees] = useState<number>(0);
 
   // Filter active trades
   useEffect(() => {
@@ -33,6 +34,26 @@ export default function ActiveTrades({
       )
     );
   }, [trades]);
+
+  // Calculate total fees
+  useEffect(() => {
+    let fees = 0;
+    activeTrades.forEach((trade) => {
+      if (trade.fee) {
+        // Convert fee to selected currency if needed
+        if (trade.currency !== selectedCurrency) {
+          fees += convertCurrency(
+            trade.fee.amount,
+            trade.currency,
+            selectedCurrency
+          );
+        } else {
+          fees += trade.fee.amount;
+        }
+      }
+    });
+    setTotalFees(fees);
+  }, [activeTrades, selectedCurrency]);
 
   // Simulate fetching current prices
   useEffect(() => {
@@ -62,7 +83,7 @@ export default function ActiveTrades({
       convertedValue = convertCurrency(value, tradeCurrency, selectedCurrency);
     }
 
-    return `${currencySymbol}${convertedValue?.toLocaleString(undefined, {
+    return `${currencySymbol}${convertedValue.toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
@@ -72,30 +93,38 @@ export default function ActiveTrades({
   const calculateProfitLoss = (trade: TradeExecution) => {
     const currentPrice = currentPrices[trade.symbol] || trade.price;
 
-    // Calculate price difference based on trade type
-    const priceDifference =
-      trade.type === OrderType.Buy
-        ? currentPrice - trade.price
-        : trade.price - currentPrice;
+    // Calculate profit/loss based on trade type
+    let profitLossInOriginalCurrency = 0;
 
-    // Calculate profit/loss in the trade's original currency
-    const profitLossInOriginalCurrency = priceDifference * trade.quantity;
+    if (trade.type === OrderType.Buy) {
+      // For BUY orders: Current value - Entry value
+      profitLossInOriginalCurrency =
+        (currentPrice - trade.price) * trade.quantity;
+    } else {
+      // For SELL orders: Entry value - Current value
+      profitLossInOriginalCurrency =
+        (trade.price - currentPrice) * trade.quantity;
+    }
+
+    // Subtract fees if available
+    let netProfitLoss = profitLossInOriginalCurrency;
+    if (trade.fee) {
+      netProfitLoss -= trade.fee.amount;
+    }
 
     // Convert to selected currency if needed
-    let profitLossValue = profitLossInOriginalCurrency;
+    let profitLossValue = netProfitLoss;
     if (trade.currency !== selectedCurrency) {
       profitLossValue = convertCurrency(
-        profitLossInOriginalCurrency,
+        netProfitLoss,
         trade.currency,
         selectedCurrency
       );
     }
 
     // Calculate percentage based on the original investment
-    const profitLossPercentage = calculateProfitLossPercentage(
-      profitLossInOriginalCurrency,
-      trade.budget
-    );
+    const originalInvestment = trade.price * trade.quantity;
+    const profitLossPercentage = (netProfitLoss / originalInvestment) * 100;
 
     return {
       value: profitLossValue,
@@ -140,9 +169,12 @@ export default function ActiveTrades({
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4">
-        Active Trades
-      </h3>
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-semibold text-gray-800">Active Trades</h3>
+        <div className="text-sm text-amber-600">
+          Total Fees: {formatCurrency(totalFees, selectedCurrency)}
+        </div>
+      </div>
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
@@ -194,6 +226,12 @@ export default function ActiveTrades({
                 scope="col"
                 className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
               >
+                Fees
+              </th>
+              <th
+                scope="col"
+                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+              >
                 Stop Loss
               </th>
               <th
@@ -230,15 +268,15 @@ export default function ActiveTrades({
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {trade.symbol}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
                     <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                      className={`px-2 py-1 rounded-full text-xs font-semibold ${
                         trade.type === OrderType.Buy
                           ? 'bg-green-100 text-green-800'
                           : 'bg-red-100 text-red-800'
                       }`}
                     >
-                      {trade.type.toUpperCase()}
+                      {trade.type === OrderType.Buy ? 'BUY' : 'SELL'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -254,17 +292,25 @@ export default function ActiveTrades({
                     {trade.quantity.toFixed(8)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span
-                      className={
+                    <div
+                      className={`flex items-center ${
                         profitLoss.isProfit ? 'text-green-600' : 'text-red-600'
-                      }
+                      }`}
                     >
-                      {formatCurrency(profitLoss.value, trade.currency)}
-                      <span className="ml-1">
+                      <span className="font-medium">
+                        {profitLoss.isProfit ? '+' : ''}
+                        {formatCurrency(profitLoss.value, selectedCurrency)}
+                      </span>
+                      <span className="ml-2 text-xs">
                         ({profitLoss.isProfit ? '+' : ''}
                         {profitLoss.percentage.toFixed(2)}%)
                       </span>
-                    </span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-amber-600">
+                    {trade.fee
+                      ? formatCurrency(trade.fee.amount, trade.currency)
+                      : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {formatCurrency(trade.stopLoss, trade.currency)}
@@ -286,12 +332,11 @@ export default function ActiveTrades({
                       {trade.status.toUpperCase()}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button
-                      type="button"
                       onClick={() => handleCancelTrade(trade.orderId)}
                       disabled={isLoading}
-                      className="text-red-600 hover:text-red-900 disabled:text-gray-400 disabled:cursor-not-allowed"
+                      className="text-indigo-600 hover:text-indigo-900 disabled:opacity-50"
                     >
                       Cancel
                     </button>

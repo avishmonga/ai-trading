@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import CryptoCard from '@/components/CryptoCard';
 import CoinDetailModal from '@/components/CoinDetailModal';
-import { CoinAnalysis, CryptoData } from '@/types';
+import PaperTradingAccount from '@/components/PaperTradingAccount';
+import { CoinAnalysis, CryptoData, Currency } from '@/types';
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
@@ -14,6 +15,9 @@ export default function Home() {
   const [modalOpen, setModalOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>(
+    Currency.USD
+  );
 
   // Fetch data on component mount and when autoRefresh is enabled
   useEffect(() => {
@@ -138,128 +142,105 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <header className="mb-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
-            <h1 className="text-3xl font-bold text-gray-900">
-              AI Crypto Trading Platform
+    <main className="min-h-screen p-4 md:p-8 bg-gray-50">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              AI Crypto Trading
             </h1>
-            <div className="flex items-center mt-2 md:mt-0">
-              <button
-                onClick={fetchData}
-                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 mr-4"
-                disabled={loading}
-              >
-                {loading ? 'Refreshing...' : 'Refresh Data'}
-              </button>
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="autoRefresh"
-                  checked={autoRefresh}
-                  onChange={(e) => setAutoRefresh(e.target.checked)}
-                  className="mr-2"
-                />
-                <label htmlFor="autoRefresh" className="text-sm text-gray-600">
-                  Auto-refresh (5m)
-                </label>
-              </div>
+            <p className="text-gray-600">
+              AI-powered crypto analysis and trading recommendations
+            </p>
+          </div>
+          <div className="mt-4 md:mt-0 flex items-center space-x-4">
+            <select
+              className="bg-white border border-gray-300 rounded-md px-3 py-2 text-sm"
+              value={selectedCurrency}
+              onChange={(e) => setSelectedCurrency(e.target.value as Currency)}
+            >
+              <option value={Currency.USD}>USD ($)</option>
+              <option value={Currency.INR}>INR (₹)</option>
+            </select>
+            <button
+              onClick={fetchData}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm hover:bg-indigo-700 transition-colors"
+            >
+              Refresh Data
+            </button>
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="autoRefresh"
+                checked={autoRefresh}
+                onChange={() => setAutoRefresh(!autoRefresh)}
+                className="mr-2"
+              />
+              <label htmlFor="autoRefresh" className="text-sm text-gray-600">
+                Auto-refresh
+              </label>
             </div>
           </div>
-          <p className="text-gray-600">
-            Automatically analyzes crypto coins and shortlists the best trading
-            opportunities
-          </p>
-          {lastUpdated && (
-            <p className="text-sm text-gray-500 mt-1">
-              Last updated: {lastUpdated.toLocaleTimeString()}
-            </p>
-          )}
-        </header>
+        </div>
+
+        {/* Paper Trading Account */}
+        <div className="mb-8">
+          <PaperTradingAccount selectedCurrency={selectedCurrency} />
+        </div>
 
         {error ? (
-          <div className="bg-red-50 p-6 rounded-lg mb-8">
-            <h2 className="text-xl font-semibold text-red-700 mb-2">Error</h2>
+          <div className="bg-red-50 p-4 rounded-md mb-8">
             <p className="text-red-600 mb-4">{error}</p>
-            <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col sm:flex-row gap-2">
               <button
+                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600"
                 onClick={fetchData}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
               >
-                Try Again
+                Retry
               </button>
-              {shortlistedCoins.length === 0 && (
-                <button
-                  onClick={provideSampleData}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                >
-                  Use Sample Data
-                </button>
-              )}
-            </div>
-            <div className="mt-4 p-4 bg-yellow-50 rounded-lg">
-              <h3 className="font-semibold text-yellow-800">
-                Troubleshooting Tips:
-              </h3>
-              <ul className="list-disc pl-5 mt-2 text-yellow-700">
-                <li>Check if Binance API is accessible from your location</li>
-                <li>Verify your internet connection</li>
-                <li>
-                  The application will use sample data if the API is unavailable
-                </li>
-              </ul>
+              <button
+                className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
+                onClick={provideSampleData}
+              >
+                Use Sample Data
+              </button>
             </div>
           </div>
-        ) : loading && shortlistedCoins.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-            <p className="text-gray-600">Analyzing crypto markets...</p>
-          </div>
-        ) : shortlistedCoins.length === 0 ? (
-          <div className="bg-yellow-50 p-6 rounded-lg">
-            <h2 className="text-xl font-semibold text-yellow-700 mb-2">
-              No Trading Opportunities
-            </h2>
-            <p className="text-yellow-600">
-              No coins meet our trading criteria at the moment. Check back later
-              or adjust the analysis parameters.
-            </p>
+        ) : loading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
           </div>
         ) : (
           <>
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">
-              Shortlisted Trading Opportunities ({shortlistedCoins.length})
-            </h2>
-            <div className="text-black grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {shortlistedCoins.map((coin) => (
                 <CryptoCard
                   key={coin.symbol}
-                  analysis={coin}
-                  onClick={handleCoinClick}
+                  coin={coin}
+                  price={priceData[coin.symbol] || 0}
+                  onClick={() => handleCoinClick(coin.symbol)}
+                  currency={selectedCurrency}
                 />
               ))}
             </div>
+
+            {lastUpdated && (
+              <p className="text-xs text-gray-500 mt-8 text-center">
+                Last updated: {lastUpdated.toLocaleString()}
+              </p>
+            )}
           </>
         )}
-
-        {/* Refreshing indicator when auto-refresh is on */}
-        {loading && shortlistedCoins.length > 0 && (
-          <div className="fixed bottom-4 right-4 bg-white rounded-full shadow-lg p-2">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
-          </div>
-        )}
-
-        {/* Coin detail modal */}
-        {selectedCoin && (
-          <CoinDetailModal
-            isOpen={modalOpen}
-            onClose={closeModal}
-            symbol={selectedCoin}
-            currentPrice={priceData[selectedCoin] || 0}
-          />
-        )}
       </div>
+
+      {selectedCoin && (
+        <CoinDetailModal
+          isOpen={modalOpen}
+          onClose={closeModal}
+          symbol={selectedCoin}
+          currentPrice={priceData[selectedCoin] || 0}
+        />
+      )}
     </main>
   );
 }
